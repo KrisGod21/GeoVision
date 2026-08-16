@@ -1,0 +1,12 @@
+{
+  "name": "geovision",
+  "private": true,
+  "type": "module",
+  "description": "Repo-level tooling for the GeoVision prototype. The web app lives in web/, the API in api/.",
+  "scripts": {
+    "assets": "node scripts/build-hero-assets.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.3"
+  }
+}

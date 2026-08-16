@@ -85,26 +85,76 @@ assets/                         source media, untouched
 
 ## 4. Asset pipeline
 
-A single Node script, `scripts/frames-to-webp.mjs`, using `sharp`. Run once; output is committed so the
+A single Node script, `scripts/build-hero-assets.mjs`, using `sharp`. Run once; output is committed so the
 site works from a fresh clone without running it.
 
 **Inputs**
 
 - `assets/ezgif-5ea5e051e9d0a528-jpg/ezgif-frame-001.jpg` … `-180.jpg` — 180 files, 1280×720, 6.48 MB total
-- `assets/model-output.png` — 1672×941, 2.9 MB
+- `assets/model-output.png` — 1672×941, 2.92 MB
 
-**Outputs**
+### 4.1 Measured finding: desktop frames are not re-encoded
+
+The original plan was to convert all 180 frames to WebP. Measurement showed that this makes the payload
+**larger**, because the source JPGs are already near-optimally compressed for grainy aerial footage.
+Every re-encode tested, across a 15-frame sample extrapolated to all 180:
+
+| Encoding | Est. full-180 | vs source |
+|---|---|---|
+| WebP q80 | 12.25 MB | 86% larger |
+| WebP q60 | 9.27 MB | 41% larger |
+| WebP q40 | 7.72 MB | 17% larger |
+| mozjpeg q60 | 7.10 MB | 8% larger |
+| WebP q30 | 6.66 MB | 1% larger |
+| WebP q25 | 6.16 MB | 6% smaller, visibly degraded |
+| AVIF q40 | 5.59 MB | 15% smaller, but far slower to decode |
+
+AVIF is rejected despite winning on bytes: 146 images must decode during the scrub, and AVIF decode is
+substantially slower than JPEG's hardware-accelerated path. A 0.9 MB saving is a bad trade for slower
+progressive loading in a scroll-scrubber.
+
+**Desktop frames are therefore copied byte-for-byte**, with no re-encode and no generation loss.
+
+### 4.2 Deduplication — where the saving actually came from
+
+34 of the 180 frames are byte-identical to their predecessor: the sequence is roughly 24fps content padded
+to 30fps, so every fifth frame through the middle is doubled. Removing them is free — no quality cost at
+all — and saves both bytes and decode work.
+
+The manifest therefore separates *distinct images* from *timeline positions*:
+
+```json
+{ "files": ["frame-000.jpg", ...], "sequence": [0, 1, 2, 3, 4, 4, 5, ...] }
+```
+
+`sequence[i]` is the index into `files` that timeline position `i` displays. The loader creates one `Image`
+per entry in `files`, so a duplicated frame costs neither a download nor a decode. There are still 180
+scrub positions; there are only 146 images.
+
+### 4.3 Outputs
 
 | Output | Source | Transform |
 |---|---|---|
-| `web/public/frames/hero/frame-001.webp` … `-180.webp` | all 180 JPGs | WebP q80, 1280×720 unchanged |
-| `web/public/frames/hero-sm/frame-001.webp` … `-030.webp` | every 6th JPG | WebP q72, resized to 640×360 |
-| `web/public/hero/model-output.webp` | `model-output.png` | WebP q82, 1672×941 unchanged |
+| `web/public/frames/hero/frame-000.jpg` … `-145.jpg` | 180 JPGs, deduplicated | copied verbatim, 1280×720 |
+| `web/public/frames/hero-sm/frame-000.webp` … `-029.webp` | every 6th JPG | WebP q72, resized to 640×360 |
+| `web/public/hero/model-output.webp` | `model-output.png` | WebP q82, 1672×941 |
+| `web/public/frames/manifest.json` | — | file lists, sequences, dimensions |
 
-The script prints before/after byte totals per output group. Those numbers are reported to the user
-before any decision about trimming frame count or resolution is made.
+Mobile *does* convert to WebP, because there the 640px downscale dominates and WebP wins. The model-output
+image also converts, because PNG is the wrong format for a photograph.
 
-Frames are named with a zero-padded 3-digit index so `pathFor(i)` is a pure string template.
+### 4.4 Measured result
+
+| | Shipped |
+|---|---|
+| Desktop frames (146 distinct) | 5.34 MB |
+| Mobile frames (30) | 0.78 MB |
+| Model output | 0.36 MB |
+| **Desktop visitor total** | **5.70 MB** |
+| **Mobile visitor total** | **1.14 MB** |
+
+The script prints these figures on every run, so any future change to frame count, resolution, or quality
+is evaluated against real numbers rather than assumptions.
 
 ---
 
@@ -126,9 +176,10 @@ is a contained change.
 | `components/hero/HeroSection.tsx` | Composes the above; owns the pin container. | all of the above |
 | `components/hero/PerfMonitor.tsx` | Dev-only FPS / jank readout. | none |
 
-`FrameSequenceCanvas` receives `frameCount`, `pathFor`, `preloadCount`, and `progress` as props. It has no
-knowledge of the hero's layout or of the reveal panel. Changing 180 frames to 90 means changing the props
-passed by `HeroSection` and re-running the asset script — nothing inside the canvas component changes.
+`FrameSequenceCanvas` receives `srcs` (the distinct image URLs), `sequence` (timeline position → src index,
+per §4.2), `preloadCount`, and `progress` as props. It has no knowledge of the hero's layout or of the
+reveal panel. Changing 180 frames to 90 means re-running the asset script — the manifest changes and
+nothing inside the canvas component does.
 
 ### 5.2 Pinning
 
@@ -159,10 +210,13 @@ comfortably; compressing them into the tail of the scrub made them flash past.
 ### 5.4 Frame loading
 
 1. On mount, decide the variant (see §5.7) **before any fetch**.
-2. `await` frames 1–20. The section is marked interactive only after this resolves.
-3. Background-load the remaining frames in ascending order, 6 concurrent requests.
-4. If the target frame is not yet loaded, draw `nearestLoadedIndex(target, loadedSet)` instead. The canvas
-   is never blank once step 2 completes.
+2. `await` the first 20 distinct images. The section is marked interactive only after this resolves.
+3. Background-load the remaining distinct images in ascending order, 6 concurrent requests.
+4. Resolve a timeline position to an image via `sequence`. If that image is not yet loaded, draw
+   `nearestLoadedIndex(target, loadedSet)` instead. The canvas is never blank once step 2 completes.
+
+Loading is keyed on the distinct-image index, never the timeline position, so duplicated frames are
+requested and decoded once.
 
 `ModelOutputReveal` fetches its single WebP when raw progress exceeds `0.45` — early enough to be decoded before
 the reveal begins, late enough not to contend with the initial 20-frame preload.
@@ -210,7 +264,39 @@ Chosen once at mount, before any image request, so a phone never downloads deskt
 The variant is recomputed on a debounced resize only if it crosses the 768px boundary, and switching
 variants remounts the canvas.
 
-### 5.8 Performance safety net
+### 5.8 Fast-scroll and flick behaviour
+
+Progress is sampled once per rAF frame. A hard flick can move raw progress from `0.2` to `1.0` between two
+samples, which would cross all three pin thresholds in a single frame and pop every pin in at once.
+
+The fix is to drive rendering from a **damped** progress value rather than the raw scroll value:
+
+```
+display += (target − display) × k     // once per rAF frame
+```
+
+Because `display` moves continuously toward `target`, the thresholds are always crossed in order and the
+stagger survives any gesture speed. Two constants:
+
+| Value | k | Rationale |
+|---|---|---|
+| scrub progress | `0.25` | Snappy — the frames must stay visually glued to the scroll position |
+| reveal progress | `0.12` | Slower — the pin stagger stays readable even when the user flicks past |
+
+Damping settles to within one frame index of the target in roughly 250ms, so a normal scroll feels direct.
+
+Additional guarantees:
+
+- Each pin carries its own CSS opacity/transform transition (180ms), a second layer of protection
+  independent of the damping.
+- The rAF loop keeps running for up to 600ms after the section leaves the viewport, so a flick that
+  overshoots the section settles offscreen rather than freezing mid-animation and appearing broken on
+  scroll-back.
+- Scrolling upward runs the identical path in reverse; pins fade out in reverse order for the same reason.
+- If the target frame for the damped value is not yet loaded, `nearestLoadedIndex` applies as in §5.4, so a
+  flick into unloaded territory shows a nearby frame rather than a blank canvas.
+
+### 5.9 Performance safety net
 
 `PerfMonitor` renders only when `?perf=1` is present in the URL. It displays:
 
@@ -364,6 +450,8 @@ environment variable. No route, no response schema, and no frontend code changes
 | Layer | Tool | What is covered |
 |---|---|---|
 | Scrub logic | Vitest | `progressToFrameIndex` across the full range and at boundaries; `splitProgress` at 0, 0.82, 1.0; `nearestLoadedIndex` with sparse loaded sets including empty and single-element cases |
+| Reveal logic | Vitest | `splitProgress` holds the frame index at the last frame for all raw values in `[0.82, 1.0]`; `revealProgress` is 0 at raw `0.82` and 1 at raw `1.0` and is clamped below `0.82`; `pinVisibility` returns the correct on/off set at and around each threshold (`0.50`, `0.65`, `0.80`), and returns pins in stagger order — never all three simultaneously — when fed a damped progress sequence |
+| Damping | Vitest | `dampStep` is monotonic toward its target, never overshoots, converges within the documented frame budget, and crosses every pin threshold in order when driven from a single-frame `0.2 → 1.0` jump |
 | Frame loader | Vitest | Concurrency ceiling is respected; load order is ascending; a failed image does not stall the queue |
 | API | pytest | Upload accepts allowed types and rejects others; job lifecycle transitions queued → running → complete; result shape matches the schema; a failing extractor produces status `failed` with a message |
 | Adapter contract | pytest | A shared conformance test suite that any `FeatureExtractor` must pass, so the real extractor is verified against the same expectations as the stub |

@@ -1,0 +1,18 @@
+node_modules/
+.DS_Store
+
+# Next.js
+web/.next/
+web/out/
+web/node_modules/
+web/.env*.local
+
+# Python
+__pycache__/
+*.py[cod]
+api/.venv/
+api/storage/
+.pytest_cache/
+
+# Scratch
+tmp-*.mjs
