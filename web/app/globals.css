@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/**
+ * GeoVision design tokens.
+ *
+ * Light site, white and green shades. Green is the brand colour, which is why
+ * the three data classes (buildings / roads / water) are deliberately NOT green
+ * -- a class colour has to be readable as data, not as branding.
+ */
+@theme {
+  --color-bg: #fdfdfb;
+  --color-surface: #ffffff;
+  --color-surface-tint: #d8f3dc;
+  --color-surface-sunken: #f2f7f3;
+
+  --color-forest: #1b4332;
+  --color-green: #2d6a4f;
+  --color-green-bright: #40916c;
+  --color-green-soft: #95d5b2;
+
+  --color-ink: #1c2321;
+  --color-muted: #5a6b62;
+  --color-hairline: #dfe7e1;
+
+  /**
+   * Data classes. Consistent everywhere: hero pins, result overlay, legend.
+   *
+   * These deliberately mirror the colours the real model already paints into
+   * its output, so a pin always matches the thing it points at. The brand green
+   * is a deep forest tone, far enough from the bright vegetation green to stay
+   * readable as branding rather than data.
+   */
+  --color-class-buildings: #ef4444;
+  --color-class-roads: #facc15;
+  --color-class-vegetation: #4ade80;
+  --color-class-water: #3b82f6;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  /* The hero relies on the window scroller; smooth scrolling fights the scrub. */
+  scroll-behavior: auto;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect the user's motion preference site-wide, not just in the hero. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
