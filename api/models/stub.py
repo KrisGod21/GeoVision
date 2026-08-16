@@ -154,12 +154,18 @@ class StubExtractor:
         hue, sat, val = hsv[..., 0], hsv[..., 1], hsv[..., 2]
 
         vegetation = (hue >= 42) & (hue <= 120) & (sat > 60) & (val > 30)
-        water = (hue >= 127) & (hue <= 184) & (sat > 50) & (val > 25)
+
+        # Water is dark blue. The upper bound on value matters: without it, sky
+        # in an oblique photograph is classified as a water body, which on a
+        # test image produced 26 hectares of water in a village that has none.
+        water = (hue >= 127) & (hue <= 184) & (sat > 50) & (val > 25) & (val < 140)
 
         # Warm roofs: the red/brown tiles that dominate rural Indian rooftops.
         warm_roof = ((hue <= 21) | (hue >= 241)) & (sat > 70) & (val > 45)
-        # Flat concrete roofs read as bright and desaturated.
-        concrete_roof = (sat < 46) & (val > 120)
+        # Flat concrete roofs read as bright and desaturated. The upper bound
+        # excludes blown-out cloud, which is otherwise indistinguishable and
+        # produced building footprints floating in the sky.
+        concrete_roof = (sat < 46) & (val > 110) & (val < 205)
         buildings = (warm_roof | concrete_roof) & ~vegetation & ~water
 
         # Whatever grey is left in the mid tones stands in for road surface.

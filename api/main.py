@@ -19,10 +19,19 @@ from api.models.adapter import FeatureExtractor
 from api.models.stub import StubExtractor
 from api.routes import jobs
 
-STORAGE_ROOT = Path(__file__).parent / "storage"
+#: Overridable so a deployment can mount a volume instead of writing into the
+#: source tree, where artifacts would be lost on every redeploy.
+STORAGE_ROOT = Path(os.environ.get("GEOVISION_STORAGE_DIR", Path(__file__).parent / "storage"))
 
-#: Frontend dev server. Tightened before anything is deployed.
-ALLOWED_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+#: Defaults cover local development. In deployment set GEOVISION_ALLOWED_ORIGINS
+#: to the frontend's origin -- a comma-separated list. Never "*": these
+#: endpoints accept uploads.
+DEFAULT_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("GEOVISION_ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
+    if origin.strip()
+]
 
 
 def select_extractor() -> FeatureExtractor:

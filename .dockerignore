@@ -1,0 +1,13 @@
+.git
+.venv
+node_modules
+web
+assets
+docs
+reference data
+**/__pycache__
+**/*.pyc
+api/storage
+.pytest_cache
+*.pdf
+*.pptx

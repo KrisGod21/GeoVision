@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 export interface PerfSample {
   fps: number;
@@ -46,13 +46,17 @@ export class PerfCollector {
  * impressions -- and so that if the hero does need trimming, the decision is
  * made against real figures.
  */
-export function PerfMonitor({ read }: { read: () => PerfSample }) {
-  const [enabled, setEnabled] = useState(false);
-  const [sample, setSample] = useState<PerfSample | null>(null);
+/**
+ * Reads the ?perf=1 flag. An external system (the URL), so it is subscribed to
+ * rather than copied into state by an effect. It cannot change without a
+ * navigation, hence the no-op subscribe.
+ */
+const subscribeToNothing = () => () => {};
+const readPerfFlag = () => new URLSearchParams(window.location.search).get("perf") === "1";
 
-  useEffect(() => {
-    setEnabled(new URLSearchParams(window.location.search).get("perf") === "1");
-  }, []);
+export function PerfMonitor({ read }: { read: () => PerfSample }) {
+  const enabled = useSyncExternalStore(subscribeToNothing, readPerfFlag, () => false);
+  const [sample, setSample] = useState<PerfSample | null>(null);
 
   useEffect(() => {
     if (!enabled) return;

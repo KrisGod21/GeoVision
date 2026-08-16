@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { FrameSequenceCanvas, type FrameSequenceHandle } from "./FrameSequenceCanvas";
 import { HeroOverlay, type HeroOverlayHandle } from "./HeroOverlay";
 import { ModelOutputReveal, type ModelOutputRevealHandle } from "./ModelOutputReveal";
@@ -9,13 +9,8 @@ import { useScrollScrub } from "./useScrollScrub";
 import { heroManifest } from "@/lib/hero/manifest.generated";
 import { frameSrcs } from "@/lib/hero/manifest";
 import { splitProgress } from "@/lib/hero/scrub";
-import {
-  MOBILE_BREAKPOINT_PX,
-  readEnvironment,
-  sectionHeightVh,
-  selectVariant,
-  type HeroVariant,
-} from "@/lib/hero/variant";
+import { useHeroEnvironment } from "@/lib/hero/useHeroEnvironment";
+import { sectionHeightVh } from "@/lib/hero/variant";
 
 /** Images awaited before the section is treated as interactive. */
 const PRELOAD_COUNT = 20;
@@ -37,38 +32,11 @@ export function HeroSection() {
 
   const perf = useRef(new PerfCollector());
 
-  // Null until mounted: the variant decides which frames to fetch, so nothing
-  // may be requested before it is known.
-  const [variant, setVariant] = useState<HeroVariant | null>(null);
-  const [narrow, setNarrow] = useState(false);
+  // Null until the client resolves it: the variant decides which frames to
+  // fetch, so nothing may be requested before it is known. The hook only
+  // re-renders when the breakpoint or the motion preference actually changes.
+  const { variant, narrow } = useHeroEnvironment();
   const [canvasReady, setCanvasReady] = useState(false);
-
-  useEffect(() => {
-    setVariant(selectVariant(readEnvironment()));
-    setNarrow(window.innerWidth < MOBILE_BREAKPOINT_PX);
-
-    // Only re-evaluate when the breakpoint is actually crossed; a variant
-    // change remounts the canvas and restarts loading, so it must be rare.
-    let wasMobile = window.innerWidth < MOBILE_BREAKPOINT_PX;
-    let timer: ReturnType<typeof setTimeout>;
-    const onResize = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const isMobile = window.innerWidth < MOBILE_BREAKPOINT_PX;
-        if (isMobile !== wasMobile) {
-          wasMobile = isMobile;
-          setNarrow(isMobile);
-          setVariant(selectVariant(readEnvironment()));
-        }
-      }, 200);
-    };
-
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      clearTimeout(timer);
-    };
-  }, []);
 
   const frameSet = variant === "compact" ? heroManifest.mobile : heroManifest.desktop;
   const srcs = useMemo(() => frameSrcs(frameSet), [frameSet]);

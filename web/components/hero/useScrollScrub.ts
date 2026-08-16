@@ -33,9 +33,13 @@ const GRACE_MS = 600;
  * approach exists to avoid -- consumers apply the values to the DOM directly.
  */
 export function useScrollScrub({ sectionRef, enabled, onFrame }: UseScrollScrubOptions) {
-  // Held in a ref so changing the callback never restarts the loop.
+  // Held in a ref so changing the callback never restarts the loop. Updated in
+  // an effect rather than during render; this effect is declared first, so the
+  // ref is current before the loop below starts.
   const onFrameRef = useRef(onFrame);
-  onFrameRef.current = onFrame;
+  useEffect(() => {
+    onFrameRef.current = onFrame;
+  }, [onFrame]);
 
   useEffect(() => {
     if (!enabled) return;
