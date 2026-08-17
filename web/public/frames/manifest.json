@@ -407,5 +407,14 @@
     "src": "/hero/model-output.webp",
     "width": 1392,
     "height": 941
+  },
+  "logo": {
+    "src": "/hero/logo.webp"
+  },
+  "watermark": {
+    "left": 1136,
+    "top": 576,
+    "width": 48,
+    "height": 48
   }
 }

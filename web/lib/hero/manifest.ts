@@ -21,6 +21,12 @@ export interface HeroManifest {
   desktop: FrameSet;
   mobile: FrameSet;
   modelOutput: { src: string; width: number; height: number };
+  logo: { src: string };
+  /**
+   * The generator watermark burned into the footage, in SOURCE-IMAGE pixel
+   * coordinates. Map it through cover-fit before positioning anything over it.
+   */
+  watermark: { left: number; top: number; width: number; height: number };
 }
 
 /** Absolute URLs for the distinct images in a frame set, in load order. */

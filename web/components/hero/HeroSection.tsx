@@ -6,6 +6,7 @@ import { HeroOverlay, type HeroOverlayHandle } from "./HeroOverlay";
 import { ModelOutputReveal, type ModelOutputRevealHandle } from "./ModelOutputReveal";
 import { PerfCollector, PerfMonitor, type PerfSample } from "./PerfMonitor";
 import { useScrollScrub } from "./useScrollScrub";
+import { WatermarkCover } from "./WatermarkCover";
 import { heroManifest } from "@/lib/hero/manifest.generated";
 import { frameSrcs } from "@/lib/hero/manifest";
 import { splitProgress } from "@/lib/hero/scrub";
@@ -122,6 +123,15 @@ export function HeroSection() {
               onReady={() => setCanvasReady(true)}
               className="absolute inset-0 h-full w-full"
             />
+          )}
+
+          {/*
+            Hides the generator watermark burned into the footage. Inside the
+            wrapper on purpose: it inherits the reveal transform, so it tracks
+            the frame without any logic of its own.
+          */}
+          {variant !== null && (
+            <WatermarkCover source={{ width: frameSet.width, height: frameSet.height }} />
           )}
 
           {/* Keeps white type legible over bright fields and pale roofs. */}

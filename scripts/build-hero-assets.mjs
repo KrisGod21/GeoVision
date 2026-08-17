@@ -44,6 +44,19 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 const SOURCE_FRAMES_DIR = path.join(repoRoot, "assets", "ezgif-5ea5e051e9d0a528-jpg");
 const SOURCE_MODEL_OUTPUT = path.join(repoRoot, "assets", "model-output.png");
+const SOURCE_LOGO = path.join(repoRoot, "assets", "geovision-logo.png");
+
+/**
+ * The generator watermark burned into the source footage, measured rather than
+ * eyeballed: every frame was averaged, which blurs the moving background and
+ * leaves a static overlay standing proud. The result is a 48x48 mark at
+ * (1136, 576) in the 1280x720 frame, identical in every frame.
+ *
+ * These are SOURCE-IMAGE coordinates. The hero cover-fits the frame to the
+ * viewport, so the overlay that hides this has to be mapped through the same
+ * transform -- see lib/hero/coverFit.ts.
+ */
+const WATERMARK_BOX = { left: 1136, top: 576, width: 48, height: 48 };
 
 const PUBLIC_DIR = path.join(repoRoot, "web", "public");
 const DESKTOP_OUT = path.join(PUBLIC_DIR, "frames", "hero");
@@ -199,6 +212,28 @@ async function buildModelOutput() {
   });
 }
 
+/**
+ * The logo used to cover the generator watermark. Kept small: it is displayed
+ * at roughly 50-90 CSS px, so 192px covers a 2x display with room to spare.
+ * WebP preserves the alpha channel the circular mark needs.
+ */
+async function buildLogo() {
+  await mkdir(HERO_OUT, { recursive: true });
+  const outFile = path.join(HERO_OUT, "logo.webp");
+
+  await sharp(SOURCE_LOGO)
+    .resize({ width: 192, height: 192, fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .webp({ quality: 90, effort: 6, alphaQuality: 100 })
+    .toFile(outFile);
+
+  report("Logo (watermark cover)", {
+    sequenceLength: 1,
+    distinct: 1,
+    sourceBytes: await sizeOf(SOURCE_LOGO),
+    outBytes: await sizeOf(outFile),
+  });
+}
+
 async function main() {
   const entries = await readdir(SOURCE_FRAMES_DIR);
   const sources = entries
@@ -215,6 +250,7 @@ async function main() {
   const desktop = await buildDesktop(sources);
   const mobile = await buildMobile(sources);
   await buildModelOutput();
+  await buildLogo();
 
   // The components need frame counts and the dedupe mapping without probing the
   // network, so they are emitted here rather than hardcoded in the components.
@@ -238,6 +274,9 @@ async function main() {
       width: MODEL_OUTPUT.width,
       height: MODEL_OUTPUT.height,
     },
+    logo: { src: "/hero/logo.webp" },
+    // Source-image coordinates; map through cover-fit before use.
+    watermark: WATERMARK_BOX,
   };
 
   await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
