@@ -16,3 +16,8 @@ api/storage/
 
 # Scratch
 tmp-*.mjs
+
+# Hero video experiment output. Lives only on experiment/gsap-video-hero and is
+# regenerable there with `npm run assets:video`. Ignored here so a stray
+# `git add -A` after switching branches cannot sweep 10.5 MB into main.
+web/public/hero/*.mp4

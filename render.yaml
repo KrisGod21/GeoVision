@@ -1,0 +1,33 @@
+# Render Blueprint for the GeoVision API.
+#
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo. Render reads
+# this file and creates the service.
+#
+# The frontend is NOT here. It deploys to Vercel from web/ (see README).
+services:
+  - type: web
+    name: geovision-api
+    runtime: docker
+    # Build context is the repo root, because the package is imported as
+    # `api.main` and needs to sit under a directory of that name.
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      # Set this in the Render dashboard to the Vercel URL once it is known.
+      # Comma-separated, no trailing slash. Never "*" -- this accepts uploads.
+      - key: GEOVISION_ALLOWED_ORIGINS
+        sync: false
+      - key: GEOVISION_EXTRACTOR
+        value: stub
+      - key: GEOVISION_STORAGE_DIR
+        value: /data/storage
+
+# Note on storage: the free plan has no persistent disk, so /data/storage lives
+# in the container filesystem and is wiped on every deploy and every restart.
+# Uploaded images and their results do not survive. That is acceptable for a
+# demo -- a job is created, processed and viewed within one session -- but it
+# is a real limitation to name rather than discover. Attaching a disk requires
+# a paid plan.

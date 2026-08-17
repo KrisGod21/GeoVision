@@ -24,5 +24,7 @@ VOLUME ["/data/storage"]
 
 EXPOSE 8000
 
+# Shell form on purpose, so ${PORT} expands. Render (and most container hosts)
+# inject the port to listen on; the exec form would pass the literal string.
 # Bind all interfaces: inside a container 127.0.0.1 is unreachable from outside.
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
