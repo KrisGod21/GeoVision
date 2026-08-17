@@ -7,11 +7,26 @@
  */
 
 /**
+ * Normalises the configured API base.
+ *
+ * A trailing slash here is silent and fatal: `${base}/api/jobs` becomes
+ * `https://host//api/jobs`, and Starlette does not collapse the double slash,
+ * so every single request 404s. Copying the URL out of a dashboard or address
+ * bar picks that slash up, which makes it an easy mistake with a symptom that
+ * points nowhere near the cause.
+ */
+export function normaliseApiBase(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+/**
  * 127.0.0.1 rather than localhost on purpose: on Windows, localhost can resolve
  * to ::1 first, and uvicorn binds IPv4 only by default -- which shows up as a
  * hang rather than a clear connection error.
  */
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
+export const API_BASE = normaliseApiBase(
+  process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000"
+);
 
 export type JobStatus = "queued" | "running" | "complete" | "failed";
 export type Stage = "tiling" | "inference" | "polygonizing" | "stitching";
