@@ -34,7 +34,11 @@ def wait_for_terminal_status(client: TestClient, job_id: str, timeout_s: float =
 
 
 def test_health(client: TestClient):
-    assert client.get("/api/health").json() == {"status": "ok"}
+    body = client.get("/api/health").json()
+    assert body["status"] == "ok"
+    # Health also echoes the CORS configuration so a broken deployment can be
+    # diagnosed in one request; those fields are asserted in test_cors_config.
+    assert "allowed_origins" in body
 
 
 def test_upload_accepts_a_png(client: TestClient, village_bytes: bytes):
