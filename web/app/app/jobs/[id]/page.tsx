@@ -18,6 +18,13 @@ import {
 
 const POLL_INTERVAL_MS = 1000;
 
+/**
+ * A single failed poll is not a failed job. Free-tier hosts drop the odd
+ * request, and giving up on the first one would abandon a job that is still
+ * running perfectly well server-side.
+ */
+const MAX_CONSECUTIVE_POLL_FAILURES = 5;
+
 export default function JobPage() {
   const { id } = useParams<{ id: string }>();
 
@@ -30,11 +37,13 @@ export default function JobPage() {
     if (!id) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let consecutiveFailures = 0;
 
     async function poll() {
       try {
         const next = await getJob(id);
         if (cancelled) return;
+        consecutiveFailures = 0;
         setStatus(next);
 
         if (next.status === "complete") {
@@ -55,8 +64,18 @@ export default function JobPage() {
         timer = setTimeout(poll, POLL_INTERVAL_MS);
       } catch (cause) {
         if (cancelled) return;
+
+        consecutiveFailures++;
+        if (consecutiveFailures < MAX_CONSECUTIVE_POLL_FAILURES) {
+          // Back off rather than hammering a struggling server.
+          timer = setTimeout(poll, POLL_INTERVAL_MS * consecutiveFailures);
+          return;
+        }
+
         setError(
-          cause instanceof Error ? cause.message : "Lost contact with the API."
+          cause instanceof Error
+            ? `${cause.message} (gave up after ${consecutiveFailures} attempts)`
+            : "Lost contact with the API."
         );
       }
     }

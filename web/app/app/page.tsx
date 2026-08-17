@@ -10,23 +10,27 @@ export default function UploadPage() {
   const router = useRouter();
   const [selected, setSelected] = useState<SelectedFile | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     if (!selected) return;
     setSubmitting(true);
+    setSlow(false);
     setError(null);
+
+    // A free-tier instance can take the better part of a minute to wake. Saying
+    // so beats an unexplained wait that looks like the page has hung.
+    const slowTimer = setTimeout(() => setSlow(true), 4000);
 
     try {
       const { job_id } = await createJob(selected.file);
       router.push(`/app/jobs/${job_id}`);
     } catch (cause) {
       setSubmitting(false);
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not reach the API. Is it running on port 8000?"
-      );
+      setError(cause instanceof Error ? cause.message : "The upload failed.");
+    } finally {
+      clearTimeout(slowTimer);
     }
   }
 
@@ -44,7 +48,7 @@ export default function UploadPage() {
         </div>
 
         {error && (
-          <p role="alert" className="mt-4 text-sm text-class-buildings">
+          <p role="alert" className="mt-4 text-sm leading-relaxed text-class-buildings">
             {error}
           </p>
         )}
@@ -57,6 +61,13 @@ export default function UploadPage() {
         >
           {submitting ? "Uploading…" : "Run extraction"}
         </button>
+
+        {submitting && slow && (
+          <p aria-live="polite" className="mt-3 text-center text-sm text-muted">
+            Still waiting on the API. A free-tier server that has gone idle can take up to a minute
+            to wake — this will either complete or report an error, it will not hang.
+          </p>
+        )}
       </div>
     </AppShell>
   );

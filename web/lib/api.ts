@@ -69,6 +69,50 @@ export class ApiError extends Error {
   }
 }
 
+export class ApiTimeoutError extends Error {
+  constructor(readonly afterMs: number) {
+    super(
+      `The API did not respond within ${Math.round(afterMs / 1000)}s. ` +
+        `If it is hosted on a free tier it may have been asleep — try once more.`
+    );
+  }
+}
+
+/**
+ * Free-tier hosts (Render, Fly, and friends) suspend idle instances and take
+ * 30-60s to wake. Without a ceiling a request against a sleeping or dead
+ * service hangs forever and the UI is indistinguishable from frozen, so every
+ * call gets a deadline and a distinguishable error.
+ */
+export const UPLOAD_TIMEOUT_MS = 90_000;
+export const POLL_TIMEOUT_MS = 15_000;
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit & { timeoutMs: number }
+): Promise<Response> {
+  const { timeoutMs, ...rest } = init;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, { ...rest, signal: controller.signal });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") {
+      throw new ApiTimeoutError(timeoutMs);
+    }
+    // fetch rejects with a deliberately vague TypeError for CORS failures,
+    // DNS failures and mixed content alike. Saying so beats "Failed to fetch".
+    throw new Error(
+      `Could not reach the API at ${API_BASE}. ` +
+        `Check that it is deployed, that NEXT_PUBLIC_API_BASE points at it over HTTPS, ` +
+        `and that its allowed origins include this site.`
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = `Request failed with ${response.status}`;
@@ -86,14 +130,34 @@ async function parse<T>(response: Response): Promise<T> {
 export async function createJob(file: File): Promise<{ job_id: string }> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${API_BASE}/api/jobs`, { method: "POST", body: form });
+  const response = await fetchWithTimeout(`${API_BASE}/api/jobs`, {
+    method: "POST",
+    body: form,
+    timeoutMs: UPLOAD_TIMEOUT_MS,
+  });
   return parse(response);
 }
 
 export async function getJob(jobId: string): Promise<JobStatusResponse> {
-  return parse(await fetch(`${API_BASE}/api/jobs/${jobId}`));
+  return parse(
+    await fetchWithTimeout(`${API_BASE}/api/jobs/${jobId}`, { timeoutMs: POLL_TIMEOUT_MS })
+  );
 }
 
 export async function getJobResult(jobId: string): Promise<JobResultResponse> {
-  return parse(await fetch(`${API_BASE}/api/jobs/${jobId}/result`));
+  return parse(
+    await fetchWithTimeout(`${API_BASE}/api/jobs/${jobId}/result`, { timeoutMs: POLL_TIMEOUT_MS })
+  );
+}
+
+/** Cheap liveness probe, used to tell "asleep" apart from "not deployed". */
+export async function checkHealth(): Promise<boolean> {
+  try {
+    const response = await fetchWithTimeout(`${API_BASE}/api/health`, {
+      timeoutMs: UPLOAD_TIMEOUT_MS,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
